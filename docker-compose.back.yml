@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: Apache-2.0
+# Licensed to the Ed-Fi Alliance under one or more agreements.
+# The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
+# See the LICENSE and NOTICES files in the project root for more information.
+
+version: "3.8"
+x-aws-vpc: "vpc-04d2051e5cdd9da47"
+networks:
+  edfi-network:
+    driver: bridge
+volumes:
+  vol-db-admin:
+    #driver: local
+    external: true
+    name: fs-06bcd811d16321a9d
+  vol-db-ods:
+    #driver: local
+    external: true
+    name: fs-0960278c4ec7b6cd1
+  logs:
+    #driver: local
+    external: true
+    name: fs-0dfb70db493cd53d4
+  ssl:
+    #driver: local
+    external: true
+    name: fs-0fb436a55c357831a
+      
+services:
+  db-ods:
+    image: edfialliance/ods-api-db-ods:${TAG}
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      TPDM_ENABLED: "${TPDM_ENABLED:-true}"
+    #ports:
+    #  - "5432"
+    volumes:
+      - vol-db-ods:/var/lib/postgresql/data
+    networks:
+      - edfi-network
+  db-admin:
+    image: edfialliance/ods-api-db-admin:${TAG}
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      API_MODE: "SharedInstance"
+    #ports:
+    #  - "5432"
+    volumes:
+      - vol-db-admin:/var/lib/postgresql/data
+    networks:
+      - edfi-network
+  api:
+    image: edfialliance/ods-api-web-api:${TAG}
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_PORT: "5432"
+      API_MODE: "SharedInstance"
+      ODS_POSTGRES_HOST: db-ods
+      ADMIN_POSTGRES_HOST: db-admin
+      ApiSettings__PathBase: "${ODS_VIRTUAL_NAME:-api}"
+      TPDM_ENABLED: "${TPDM_ENABLED:-true}"
+    #ports:
+    #  - "443:443"
+    #  - "80:80"
+    volumes:
+      - logs:/app/logs
+    depends_on:
+      - db-ods
+      - db-admin
+      - admin
+    networks:
+      - edfi-network
+  admin:
+    image: edfialliance/ods-admin-app:${TAG}
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_PORT: "5432"
+      ADMIN_USER: "${ADMIN_USER}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+      ODS_POSTGRES_HOST: db-ods
+      ADMIN_POSTGRES_HOST: db-admin
+      API_MODE: "SharedInstance"
+      API_EXTERNAL_URL: "https://ecs.support.ed-fi.org/${ODS_VIRTUAL_NAME:-api}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+      ADMINAPP_VIRTUAL_NAME: "${ADMINAPP_VIRTUAL_NAME:-adminapp}"
+      API_INTERNAL_URL: "http://edfi.local"
+    volumes:
+      - logs:/app/logs
+    #ports:
+    #  - "443:443"
+    #  - "80:80"
+    depends_on:
+      - db-ods
+      - db-admin
+    networks:
+      - edfi-network
+  nginx:
+    image: edfialliance/ods-api-web-gateway-sandbox:${TAG}
+    environment:
+      ODS_VIRTUAL_NAME: "${ODS_VIRTUAL_NAME:-api}"
+      ADMINAPP_VIRTUAL_NAME: "${ADMINAPP_VIRTUAL_NAME:-adminapp}"
+    ports:
+    #  - "443:443"
+      - "80:80"
+    #volumes:
+    #  - ssl:/ssl
+    depends_on:
+      - api
+      - admin
+    networks:
+      - edfi-network
+#x-aws-cloudformation:
+#  Resources:
+#    NginxTCP80Listener:
+#      Properties:
+#        Certificates:
+#          - CertificateArn: "arn:aws:acm:us-east-1:055640809004:certificate/394a0e79-2cbc-46a5-afb0-e2b3bc55118e"
+#        Protocol: HTTPS
+#        Port: 443

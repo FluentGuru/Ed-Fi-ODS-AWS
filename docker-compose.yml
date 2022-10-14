@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: Apache-2.0
+# Licensed to the Ed-Fi Alliance under one or more agreements.
+# The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
+# See the LICENSE and NOTICES files in the project root for more information.
+
+version: "3.8"
+x-aws-vpc: "${AWS_VPC_ID}"
+x-aws-loadbalancer: "${AWS_LB_NAME}"
+services:
+  api:
+    image: edfialliance/ods-api-web-api:${TAG}
+    deploy:
+      replicas: 2
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
+      ODS_POSTGRES_HOST: "${ODS_POSTGRES_HOST}"
+      ADMIN_POSTGRES_HOST: "${ADMIN_POSTGRES_HOST}"
+      API_MODE: "${API_MODE}"
+      ApiSettings__PathBase: "${ODS_VIRTUAL_NAME:-api}"
+      TPDM_ENABLED: "${TPDM_ENABLED:-true}"
+      API_HEALTHCHECK_TEST: "${API_HEALTHCHECK_TEST}"
+    ports:
+    - target: 80
+      x-aws-protocol: http
+    container_name: ed-fi-ods-api
+    healthcheck:
+      test: "${API_HEALTHCHECK_TEST}"
+      start_period: "60s"
+      retries: 3
+
+  swagger:
+    image: edfialliance/ods-api-web-swaggerui
+    deploy:
+      replicas: 2
+    environment:
+      POPULATED_KEY: "${POPULATED_KEY}"
+      POPULATED_SECRET: "${POPULATED_SECRET}"
+      WebApiVersionUrl: "${API_EXTERNAL_URL}"
+      PathBase: "${DOCS_VIRTUAL_NAME:-docs}"
+      ASPNETCORE_URLS: "http://+:8081"
+      Urls: "http://+:8081"
+      SWAGGER_HEALTHCHECK_TEST: "${SWAGGER_HEALTHCHECK_TEST}"
+    ports:
+    - target: 8081
+      x-aws-protocol: http
+    depends_on:
+      - api
+    container_name: ed-fi-swagger
+    healthcheck:
+      test: "${SWAGGER_HEALTHCHECK_TEST}"
+      start_period: "60s"
+      retries: 3
+  adminapp:
+    image: public.ecr.aws/s2q7l7m0/ods-admin-app:debug4
+    deploy:
+      replicas: 2
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_PORT: "${POSTGRES_PORT}"
+      ODS_POSTGRES_HOST: "${ODS_POSTGRES_HOST}"
+      ADMIN_POSTGRES_HOST: "${ADMIN_POSTGRES_HOST}"
+      API_MODE: "${API_MODE}"
+      API_EXTERNAL_URL: "${API_EXTERNAL_URL}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY}"
+      ADMINAPP_VIRTUAL_NAME: "${ADMINAPP_VIRTUAL_NAME:-adminapp}"
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+      ADMINAPP_HEALTHCHECK_TEST: ${ADMINAPP_HEALTHCHECK_TEST}
+      ASPNETCORE_URLS: "http://+:8082"
+      ADMIN_USER: "${ADMIN_USER}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+    ports:
+    - target: 8082
+      x-aws-protocol: http
+    depends_on:
+      - api
+    container_name: ed-fi-ods-adminapp
+    healthcheck:
+      test: "${ADMINAPP_HEALTHCHECK_TEST}"
+      start_period: "60s"
+      retries: 3

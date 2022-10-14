@@ -1,0 +1,375 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  Api80Listener:
+    Properties:
+      DefaultActions:
+      - ForwardConfig:
+          TargetGroups:
+          - TargetGroupArn:
+              Ref: Api80TargetGroup
+        Type: forward
+      LoadBalancerArn: arn:aws:elasticloadbalancing:us-east-1:055640809004:loadbalancer/app/developersnet-edfi-shared-elb/73b1755bab06ba9e
+      Port: 80
+      Protocol: HTTP
+    Type: AWS::ElasticLoadBalancingV2::Listener
+  Api80TargetGroup:
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      Tags:
+      - Key: com.docker.compose.project
+        Value: ed-fi-ods-aws
+      TargetType: ip
+      VpcId: vpc-0fcf208e6ecec4037
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  ApiService:
+    DependsOn:
+    - Api80Listener
+    Properties:
+      Cluster:
+        Fn::GetAtt:
+        - Cluster
+        - Arn
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: ECS
+      DesiredCount: 3
+      LaunchType: FARGATE
+      LoadBalancers:
+      - ContainerName: api
+        ContainerPort: 80
+        TargetGroupArn:
+          Ref: Api80TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+          - Ref: DefaultNetwork
+          Subnets:
+          - subnet-02dd6216d88a13b31
+          - subnet-07ad7a05d455a45cf
+      PlatformVersion: 1.4.0
+      PropagateTags: SERVICE
+      SchedulingStrategy: REPLICA
+      ServiceRegistries:
+      - RegistryArn:
+          Fn::GetAtt:
+          - ApiServiceDiscoveryEntry
+          - Arn
+      Tags:
+      - Key: com.docker.compose.project
+        Value: ed-fi-ods-aws
+      - Key: com.docker.compose.service
+        Value: api
+      TaskDefinition:
+        Ref: ApiTaskDefinition
+    Type: AWS::ECS::Service
+  ApiServiceDiscoveryEntry:
+    Properties:
+      Description: '"api" service discovery entry in Cloud Map'
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: api
+      NamespaceId:
+        Ref: CloudMap
+    Type: AWS::ServiceDiscovery::Service
+  ApiTaskDefinition:
+    Properties:
+      ContainerDefinitions:
+      - Command:
+        - us-east-1.compute.internal
+        - ed-fi-ods-aws.local
+        Essential: false
+        Image: docker/ecs-searchdomain-sidecar:1.0
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ed-fi-ods-aws
+        Name: Api_ResolvConf_InitContainer
+      - DependsOn:
+        - Condition: SUCCESS
+          ContainerName: Api_ResolvConf_InitContainer
+        Environment:
+        - Name: ADMIN_POSTGRES_HOST
+          Value: developersnet-edfi-shared-admin-rds.ckljvufeppno.us-east-1.rds.amazonaws.com
+        - Name: API_MODE
+          Value: SharedInstance
+        - Name: ApiSettings__PathBase
+          Value: api
+        - Name: ODS_POSTGRES_HOST
+          Value: developersnet-edfi-shared-ods-rds.ckljvufeppno.us-east-1.rds.amazonaws.com
+        - Name: POSTGRES_PASSWORD
+          Value: postgres1
+        - Name: POSTGRES_PORT
+          Value: "5432"
+        - Name: POSTGRES_USER
+          Value: postgres
+        - Name: TPDM_ENABLED
+          Value: "true"
+        Essential: true
+        Image: docker.io/edfialliance/ods-api-web-api:v2@sha256:e9726766981415d61575b46c3178c7c693f103f86507aeef9e626a9a4b7e4e1a
+        LinuxParameters: {}
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ed-fi-ods-aws
+        Name: api
+        PortMappings:
+        - ContainerPort: 80
+          HostPort: 80
+      Cpu: "256"
+      ExecutionRoleArn:
+        Ref: ApiTaskExecutionRole
+      Family: ed-fi-ods-aws-api
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+    Type: AWS::ECS::TaskDefinition
+  ApiTaskExecutionRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Condition: {}
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Tags:
+      - Key: com.docker.compose.project
+        Value: ed-fi-ods-aws
+      - Key: com.docker.compose.service
+        Value: api
+    Type: AWS::IAM::Role
+  CloudMap:
+    Properties:
+      Description: Service Map for Docker Compose project ed-fi-ods-aws
+      Name: ed-fi-ods-aws.local
+      Vpc: vpc-0fcf208e6ecec4037
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+  Cluster:
+    Properties:
+      ClusterName: ed-fi-ods-aws
+      Tags:
+      - Key: com.docker.compose.project
+        Value: ed-fi-ods-aws
+    Type: AWS::ECS::Cluster
+  Default80Ingress:
+    Properties:
+      CidrIp: 0.0.0.0/0
+      Description: api:80/ on default network
+      FromPort: 80
+      GroupId:
+        Ref: DefaultNetwork
+      IpProtocol: "-1"
+      ToPort: 80
+    Type: AWS::EC2::SecurityGroupIngress
+  Default4444Ingress:
+    Properties:
+      CidrIp: 0.0.0.0/0
+      Description: swagger:4444/ on default network
+      FromPort: 4444
+      GroupId:
+        Ref: DefaultNetwork
+      IpProtocol: "-1"
+      ToPort: 4444
+    Type: AWS::EC2::SecurityGroupIngress
+  DefaultNetwork:
+    Properties:
+      GroupDescription: ed-fi-ods-aws Security Group for default network
+      Tags:
+      - Key: com.docker.compose.project
+        Value: ed-fi-ods-aws
+      - Key: com.docker.compose.network
+        Value: ed-fi-ods-aws_default
+      VpcId: vpc-0fcf208e6ecec4037
+    Type: AWS::EC2::SecurityGroup
+  DefaultNetworkIngress:
+    Properties:
+      Description: Allow communication within network default
+      GroupId:
+        Ref: DefaultNetwork
+      IpProtocol: "-1"
+      SourceSecurityGroupId:
+        Ref: DefaultNetwork
+    Type: AWS::EC2::SecurityGroupIngress
+  LogGroup:
+    Properties:
+      LogGroupName: /docker-compose/ed-fi-ods-aws
+    Type: AWS::Logs::LogGroup
+  Swagger4444Listener:
+    Properties:
+      DefaultActions:
+      - ForwardConfig:
+          TargetGroups:
+          - TargetGroupArn:
+              Ref: Swagger4444TargetGroup
+        Type: forward
+      LoadBalancerArn: arn:aws:elasticloadbalancing:us-east-1:055640809004:loadbalancer/app/developersnet-edfi-shared-elb/73b1755bab06ba9e
+      Port: 4444
+      Protocol: HTTP
+    Type: AWS::ElasticLoadBalancingV2::Listener
+  Swagger4444TargetGroup:
+    Properties:
+      Port: 4444
+      Protocol: HTTP
+      Tags:
+      - Key: com.docker.compose.project
+        Value: ed-fi-ods-aws
+      TargetType: ip
+      VpcId: vpc-0fcf208e6ecec4037
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  SwaggerService:
+    DependsOn:
+    - Swagger4444Listener
+    - ApiService
+    Properties:
+      Cluster:
+        Fn::GetAtt:
+        - Cluster
+        - Arn
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: ECS
+      DesiredCount: 3
+      LaunchType: FARGATE
+      LoadBalancers:
+      - ContainerName: swagger
+        ContainerPort: 4444
+        TargetGroupArn:
+          Ref: Swagger4444TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+          - Ref: DefaultNetwork
+          Subnets:
+          - subnet-02dd6216d88a13b31
+          - subnet-07ad7a05d455a45cf
+      PlatformVersion: 1.4.0
+      PropagateTags: SERVICE
+      SchedulingStrategy: REPLICA
+      ServiceRegistries:
+      - RegistryArn:
+          Fn::GetAtt:
+          - SwaggerServiceDiscoveryEntry
+          - Arn
+      Tags:
+      - Key: com.docker.compose.project
+        Value: ed-fi-ods-aws
+      - Key: com.docker.compose.service
+        Value: swagger
+      TaskDefinition:
+        Ref: SwaggerTaskDefinition
+    Type: AWS::ECS::Service
+  SwaggerServiceDiscoveryEntry:
+    Properties:
+      Description: '"swagger" service discovery entry in Cloud Map'
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: swagger
+      NamespaceId:
+        Ref: CloudMap
+    Type: AWS::ServiceDiscovery::Service
+  SwaggerTaskDefinition:
+    Properties:
+      ContainerDefinitions:
+      - Command:
+        - us-east-1.compute.internal
+        - ed-fi-ods-aws.local
+        Essential: false
+        Image: docker/ecs-searchdomain-sidecar:1.0
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ed-fi-ods-aws
+        Name: Swagger_ResolvConf_InitContainer
+      - DependsOn:
+        - Condition: SUCCESS
+          ContainerName: Swagger_ResolvConf_InitContainer
+        Environment:
+        - Name: ASPNETCORE_URLS
+          Value: http://+:4444
+        - Name: POPULATED_KEY
+          Value: populated
+        - Name: POPULATED_SECRET
+          Value: populatedSecret
+        - Name: PathBase
+          Value: docs
+        - Name: WebApiVersionUrl
+          Value: https://https://mpha12z0rb.execute-api.us-east-1.amazonaws.com/api
+        Essential: true
+        Image: docker.io/edfialliance/ods-api-web-swaggerui:v2@sha256:ee45983dda7166a71f2b7e26247266415cfd5ac7522afd4f0756e4d7cf62180b
+        LinuxParameters: {}
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: LogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ed-fi-ods-aws
+        Name: swagger
+        PortMappings:
+        - ContainerPort: 4444
+          HostPort: 4444
+      Cpu: "256"
+      ExecutionRoleArn:
+        Ref: SwaggerTaskExecutionRole
+      Family: ed-fi-ods-aws-swagger
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+    Type: AWS::ECS::TaskDefinition
+  SwaggerTaskExecutionRole:
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Condition: {}
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+        Version: 2012-10-17
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Tags:
+      - Key: com.docker.compose.project
+        Value: ed-fi-ods-aws
+      - Key: com.docker.compose.service
+        Value: swagger
+    Type: AWS::IAM::Role
