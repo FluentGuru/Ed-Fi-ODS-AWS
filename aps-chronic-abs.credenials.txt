@@ -1,5 +1,0 @@
-Name: aps-chronic-absenteesism-vm
-IP Address: 18.224.195.89
-Region: us-east-2 (Ohio)
-Username: Administrator
-Password: M9mPHSOEQGFeSaJFDc87*;h-JhyLksc3
