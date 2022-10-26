@@ -43,6 +43,7 @@
 3.1. Create an ELB Target group with:
 - Empty listing
 - No listeners
+
 3.2. Create an Application load balancer with
 - the empty target group assigned
 - Associated to the created VPC

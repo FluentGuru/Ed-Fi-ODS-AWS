@@ -8,7 +8,7 @@ x-aws-vpc: "${AWS_VPC_ID}"
 x-aws-loadbalancer: "${AWS_LB_NAME}"
 services:
   api:
-    image: ${AWS_ECR_URL}/developersnet-edfi-api:latest
+    image: "${ODSAPI_IMAGE}"
     deploy:
       replicas: 2
     environment:
@@ -31,7 +31,7 @@ services:
       retries: 3
 
   swagger:
-    image: ${AWS_ECR_URL}/developersnet-edfi-swagger:latest
+    image: "${SWAGGER_IMAGE}"
     deploy:
       replicas: 2
     environment:
@@ -53,7 +53,7 @@ services:
       start_period: "60s"
       retries: 3
   adminapp:
-    image: ${AWS_ECR_URL}/developersnet-edfi-adminapp:latest
+    image: "${ADMINAPP_IMAGE}"
     deploy:
       replicas: 1
     environment:

@@ -5,18 +5,18 @@ aws ecr-public get-login-password --region us-east-1 | docker login --username A
 
 #ODS
 echo "Publishing ODS API"
-docker build -t $AWS_ECR_URL/developersnet-edfi-api:latest ./images/ods/ 
-docker push $AWS_ECR_URL/developersnet-edfi-api:latest
+docker build -t $ODSAPI_IMAGE ./images/ods/ 
+docker push $ODSAPI_IMAGE
 
 #ADMIN
 echo "Publishing ADMINAPP"
-docker build -t $AWS_ECR_URL/developersnet-edfi-adminapp:latest ./images/adminapp/
-docker push $AWS_ECR_URLdevelopersnet-edfi-adminapp:latest
+docker build -t $ADMINAPP_IMAGE ./images/adminapp/
+docker push $ADMINAPP_IMAGE
 
 #SWAGGER
 echo "Publishing SWAGGER"
-docker build -t $AWS_ECR_URL/developersnet-edfi-swagger:latest ./images/swagger/
-docker push $AWS_ECR_URL/developersnet-edfi-swagger:latest
+docker build -t $SWAGGER_IMAGE ./images/swagger/
+docker push $SWAGGER_IMAGE
 
 
 
